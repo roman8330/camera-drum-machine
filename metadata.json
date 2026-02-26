@@ -1,0 +1,5 @@
+{
+  "name": "Grid Drummer",
+  "description": "A single-page drum sequencer that uses your camera to scan a 4x8 grid of objects to create a beat.",
+  "requestFramePermissions": ["camera"]
+}
