@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Drum Grid</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        canvas { border: 2px solid #444; max-width: 95vw; max-height: 70vh; }
+        .controls { padding: 20px; text-align: center; }
+        button { padding: 12px 24px; font-size: 18px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        .legend { display: grid; grid-template-columns: repeat(8, 1fr); width: 640px; margin-top: 10px; font-size: 12px; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h1>Camera Drum Machine</h1>
+        <button id="startBtn">Start Audio & Camera</button>
+        <p>Align a 4x8 grid to the boxes. Place dark objects to set beats.</p>
+    </div>
+    
+    <div style="position: relative;">
+        <video id="video" width="640" height="480" style="display:none" autoplay playsinline></video>
+        <canvas id="output" width="640" height="480"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('output');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const startBtn = document.getElementById('startBtn');
+
+        const ROWS = 4;
+        const COLS = 8;
+        const drumNames = ['Open HH', 'Closed HH', 'Snare', 'Kick'];
+        let grid = Array(ROWS).fill().map(() => Array(COLS).fill(false));
+        let currentStep = 0;
+
+        // 1. Setup Audio Samples
+        const kit = {
+            'Open HH': new Tone.Player("https://tonejs.github.io/audio/drum-samples/CR78/hh.mp3").toDestination(),
+            'Closed HH': new Tone.Player("https://tonejs.github.io/audio/drum-samples/CR78/hho.mp3").toDestination(),
+            'Snare': new Tone.Player("https://tonejs.github.io/audio/drum-samples/CR78/snare.mp3").toDestination(),
+            'Kick': new Tone.Player("https://tonejs.github.io/audio/drum-samples/CR78/kick.mp3").toDestination()
+        };
+
+        // 2. Sequencer Loop
+        Tone.Transport.scheduleRepeat((time) => {
+            for (let r = 0; r < ROWS; r++) {
+                if (grid[r][currentStep]) {
+                    kit[drumNames[r]].start(time);
+                }
+            }
+            currentStep = (currentStep + 1) % COLS;
+        }, "8n");
+
+        // 3. Camera & Detection Logic
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+            video.srcObject = stream;
+        }
+
+        function processFrame() {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const cellW = canvas.width / COLS;
+            const cellH = canvas.height / ROWS;
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const x = c * cellW;
+                    const y = r * cellH;
+
+                    // Get pixel data for the center of the cell
+                    const pixelData = ctx.getImageData(x + cellW/2, y + cellH/2, 5, 5).data;
+                    let brightness = 0;
+                    for (let i = 0; i < pixelData.length; i += 4) {
+                        brightness += (pixelData[i] + pixelData[i+1] + pixelData[i+2]) / 3;
+                    }
+                    brightness /= (pixelData.length / 4);
+
+                    // Threshold: If cell is dark (object present), mark as active
+                    grid[r][c] = brightness < 80; 
+
+                    // Visual Feedback
+                    ctx.strokeStyle = (c === currentStep) ? "yellow" : "#555";
+                    ctx.lineWidth = (c === currentStep) ? 4 : 1;
+                    ctx.strokeRect(x, y, cellW, cellH);
+
+                    if (grid[r][c]) {
+                        ctx.fillStyle = "rgba(0, 255, 0, 0.4)";
+                        ctx.fillRect(x, y, cellW, cellH);
+                    }
+                    
+                    if(c === 0) {
+                        ctx.fillStyle = "white";
+                        ctx.fillText(drumNames[r], 5, y + 15);
+                    }
+                }
+            }
+            requestAnimationFrame(processFrame);
+        }
+
+        startBtn.onclick = async () => {
+            await Tone.start();
+            await setupCamera();
+            Tone.Transport.bpm.value = 120;
+            Tone.Transport.start();
+            startBtn.style.display = 'none';
+            processFrame();
+        };
+    </script>
+</body>
+</html>
