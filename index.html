@@ -56,10 +56,35 @@
         }, "8n");
 
         // 3. Camera & Detection Logic
-        async function setupCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
-            video.srcObject = stream;
-        }
+async function setupCamera() {
+    // Constraints specifically targeting the rear camera ("environment")
+    const constraints = {
+        video: {
+            facingMode: { ideal: "environment" }, // 'ideal' allows fallback if no rear cam exists
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+        },
+        audio: false
+    };
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+
+        // Wait for video to load to get correct dimensions
+        return new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+                // Adjust canvas to match actual video stream dimensions
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                resolve();
+            };
+        });
+    } catch (err) {
+        console.error("Error accessing camera: ", err);
+        alert("Could not access rear camera. Please ensure you granted permissions and are using HTTPS.");
+    }
+}
 
         function processFrame() {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
